@@ -30,19 +30,21 @@ body {
     color: #111;
 }
 
-h1 { font-size: 20pt; margin-bottom: 0.2em; }
+h1 { font-size: 20pt; margin-bottom: 0.2em; bookmark-level: 1; }
 h2 {
     font-size: 15pt;
     margin-top: 1.2em;
     border-bottom: 1.5pt solid #333;
     padding-bottom: 0.15em;
     page-break-after: avoid;
+    bookmark-level: 2;
 }
 h3 {
     font-size: 12pt;
     margin-top: 1em;
     margin-bottom: 0.3em;
     page-break-after: avoid;
+    bookmark-level: 3;
 }
 
 em { color: #555; }
@@ -129,7 +131,10 @@ def render_pdf(markdown_path: str, pdf_path: str) -> None:
         ) from exc
 
     markdown_text = Path(markdown_path).read_text(encoding="utf-8")
-    body_html = markdown_lib.markdown(markdown_text, extensions=["tables"])
+    # "toc" is used only for its side effect of assigning an id to every
+    # heading (matching the #anchor links in the Table of Contents) -- no
+    # [TOC] marker is in the source, so it doesn't also inject its own div.
+    body_html = markdown_lib.markdown(markdown_text, extensions=["tables", "toc"])
     full_html = HTML_TEMPLATE.format(css=PDF_CSS, body=body_html)
 
     try:

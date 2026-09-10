@@ -6,6 +6,10 @@ This Python program exports key data from Netbox that can be stored offline or p
 
 NDRE will optionally include one or more sections from a file specified through `--frontmatter`. This allows you to give additional context and information to be part of the document.
 
+## Table of Contents
+
+The document opens with a table of contents linking to each top-level section, both in the Markdown (works on GitHub, VS Code, etc.) and as clickable links plus a bookmark outline in the PDF.
+
 ## Netbox objects to document
 
 NDRE exports Netbox data that is relevant to a Disaster Recovery operation; it leaves out information that is not immediately necessary. It also only exports information from a subset of Netbox objects, to keep the size managable.
