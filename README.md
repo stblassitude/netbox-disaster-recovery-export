@@ -44,6 +44,15 @@ Any IP address exported through device interfaces or similar is listed in a sect
 
 Any DNS name (indirectly) tagged is listed, with a section per zone. 
 
+### Other Tagged Objects
+
+Any tagged object of a type not covered by one of the sections above (for
+example a tagged circuit, contact, or tenant) is included in an "Other
+Tagged Objects" section, grouped by object type. Types with 7 or fewer
+properties are listed as one table, one row per object; types with more
+properties get a sub-section per object instead, with a table listing each
+property and its value.
+
 ### PDF rendering
 
 Pass `--pdf` to also render the Markdown export to PDF. This converts the

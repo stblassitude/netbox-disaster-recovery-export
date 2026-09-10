@@ -39,6 +39,7 @@ def render(data: ExportData) -> str:
         interfaces=data.interfaces,
         subnets=data.subnets,
         dns_zones=data.dns_zones,
+        other_objects=data.other_objects,
     )
 
 

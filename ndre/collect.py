@@ -4,6 +4,8 @@ the Markdown template.
 
 from __future__ import annotations
 
+from pynetbox import RequestError
+
 from ndre.client import NetboxClient
 from ndre.models import (
     Connection,
@@ -14,6 +16,8 @@ from ndre.models import (
     Metadata,
     PrefixInfo,
     SubnetSection,
+    TaggedObject,
+    TaggedObjectSection,
     VlanInfo,
 )
 
@@ -307,3 +311,91 @@ def collect_dns(all_ip_infos: list) -> list:
         zones.setdefault(zone, DnsZoneSection(zone=zone)).records.append(ip)
 
     return [zones[z] for z in sorted(zones)]
+
+
+# -- Any other tagged object, discovered generically -----------------------
+
+# Object types already covered by a dedicated, curated collector above.
+# Excluded here so they aren't also dumped into the generic section.
+_HANDLED_ENDPOINTS = {
+    ("dcim", "devices"),
+    ("dcim", "interfaces"),
+    ("dcim", "cables"),
+    ("ipam", "vlans"),
+    ("ipam", "prefixes"),
+    ("ipam", "ip-addresses"),
+}
+
+_SKIPPED_PROPERTIES = {"id", "url", "display", "display_url", "name", "label"}
+
+
+def _humanize(field: str) -> str:
+    words = [w for w in field.replace("-", "_").split("_") if w]
+    return " ".join(w.capitalize() for w in words)
+
+
+def _stringify_value(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, dict):
+        for key in ("display", "label", "name", "value"):
+            if value.get(key):
+                return str(value[key])
+        return ", ".join(f"{k}: {v}" for k, v in value.items()) or None
+    if isinstance(value, (list, tuple)):
+        parts = [p for p in (_stringify_value(v) for v in value) if p]
+        return ", ".join(parts) or None
+    return str(value)
+
+
+def _object_properties(obj) -> dict[str, str]:
+    """Flatten a pynetbox record into a display-name -> string-value dict."""
+    raw = dict(obj)
+    custom_fields = raw.pop("custom_fields", None) or {}
+    for key in _SKIPPED_PROPERTIES:
+        raw.pop(key, None)
+
+    props = {}
+    for key, value in {**raw, **custom_fields}.items():
+        text = _stringify_value(value)
+        if text is not None:
+            props[_humanize(key)] = text
+    return props
+
+
+def collect_other_tagged_objects(client: NetboxClient, tag: str) -> list[TaggedObjectSection]:
+    """Find every object of every type carrying `tag` that isn't already
+    covered by one of the curated collectors above.
+    """
+    sections = []
+    for app_label, model_slug, endpoint in client.discover_taggable_endpoints():
+        if (app_label, model_slug) in _HANDLED_ENDPOINTS:
+            continue
+        try:
+            records = list(endpoint.filter(tag=tag))
+        except RequestError:
+            continue
+        if not records:
+            continue
+
+        objects = []
+        columns: list[str] = []
+        for obj in records:
+            props = _object_properties(obj)
+            for key in props:
+                if key not in columns:
+                    columns.append(key)
+            objects.append(TaggedObject(name=str(obj), properties=props))
+
+        sections.append(
+            TaggedObjectSection(
+                label=f"{app_label.capitalize()} / {_humanize(model_slug)}",
+                columns=columns,
+                objects=objects,
+            )
+        )
+
+    sections.sort(key=lambda s: s.label)
+    return sections

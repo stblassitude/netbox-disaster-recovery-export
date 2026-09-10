@@ -9,6 +9,7 @@ from ndre.collect import (
     collect_devices,
     collect_dns,
     collect_interfaces,
+    collect_other_tagged_objects,
     collect_subnets,
 )
 from ndre.config import parse_args
@@ -37,6 +38,9 @@ def main(argv: list[str] | None = None) -> int:
     all_ip_infos = [ip for section in subnets for ip in section.ip_addresses]
     dns_zones = collect_dns(all_ip_infos)
 
+    print(f"Fetching other objects tagged '{config.tag}'...", file=sys.stderr)
+    other_objects = collect_other_tagged_objects(client, config.tag)
+
     data = ExportData(
         title=config.title,
         generated_at=now_iso(),
@@ -47,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         interfaces=interfaces,
         subnets=subnets,
         dns_zones=dns_zones,
+        other_objects=other_objects,
     )
 
     markdown = render(data)

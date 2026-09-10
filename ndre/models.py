@@ -99,6 +99,19 @@ class DnsZoneSection:
 
 
 @dataclass
+class TaggedObject:
+    name: str
+    properties: dict[str, str]
+
+
+@dataclass
+class TaggedObjectSection:
+    label: str
+    columns: list[str]
+    objects: list[TaggedObject]
+
+
+@dataclass
 class ExportData:
     title: str
     generated_at: str
@@ -109,3 +122,4 @@ class ExportData:
     interfaces: dict[str, list[InterfaceInfo]]
     subnets: list[SubnetSection]
     dns_zones: list[DnsZoneSection]
+    other_objects: list[TaggedObjectSection]

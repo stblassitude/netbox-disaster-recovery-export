@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pynetbox
 from pynetbox import RequestError
+from pynetbox.core.app import App
 
 
 class NetboxClient:
@@ -24,6 +25,42 @@ class NetboxClient:
     def objects_by_tag(self, endpoint, tag: str):
         """Return a list of records from a pynetbox endpoint filtered by tag."""
         return list(endpoint.filter(tag=tag))
+
+    def discover_taggable_endpoints(self):
+        """Discover every list endpoint that supports filtering by tag.
+
+        Uses the OpenAPI schema rather than hardcoding a model list, so
+        callers can look for tagged objects of types this tool has no
+        dedicated support for. Restricting to endpoints that declare a
+        `tag` filter parameter matters, not just for relevance: most
+        models (users, tokens, permissions, the changelog, ...) aren't
+        taggable, and Netbox's list endpoints silently ignore an unknown
+        filter rather than rejecting it -- querying them with `tag=...`
+        would return their entire, unfiltered table. Returns a list of
+        (app_label, model_slug, Endpoint) tuples.
+        """
+        spec = self.api.openapi()
+        endpoints = []
+        for path, methods in spec.get("paths", {}).items():
+            get = methods.get("get")
+            if not get or "{id}" in path:
+                continue
+            params = get.get("parameters", [])
+            if not any(isinstance(p, dict) and p.get("name") == "tag" for p in params):
+                continue
+
+            parts = [p for p in path.strip("/").split("/") if p]
+            if parts and parts[0] == "api":
+                parts = parts[1:]
+            if len(parts) != 2:
+                continue
+
+            app_label, model_slug = parts
+            app = getattr(self.api, app_label, None)
+            if not isinstance(app, App):
+                continue
+            endpoints.append((app_label, model_slug, app.endpoint(model_slug)))
+        return endpoints
 
     def _object_types_endpoint(self):
         if self._use_legacy_endpoints:

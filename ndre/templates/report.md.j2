@@ -105,3 +105,30 @@ _No VLANs or subnets tagged `{{ tag }}`._
 {% else %}
 _No DNS names found among exported IP addresses._
 {% endfor %}
+
+## Other Tagged Objects
+{% for section in other_objects %}
+### {{ section.label }}
+
+{% if section.columns|length <= 7 %}
+| Name {% for c in section.columns %}| {{ c }} {% endfor %}|
+| --- {% for c in section.columns %}| --- {% endfor %}|
+{% for obj in section.objects -%}
+| {{ obj.name }} {% for c in section.columns %}| {{ obj.properties.get(c, "-") }} {% endfor %}|
+{% endfor %}
+{% else %}
+{% for obj in section.objects %}
+#### {{ obj.name }}
+
+| Property | Value |
+| --- | --- |
+{% for key, value in obj.properties.items() -%}
+| {{ key }} | {{ value }} |
+{% endfor %}
+
+{% endfor %}
+{% endif %}
+
+{% else %}
+_No other tagged objects found._
+{% endfor %}
