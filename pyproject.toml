@@ -1,5 +1,5 @@
 [project]
-name = "ndre"
+name = "netbox_disaster_recovery_export"
 version = "0.1.0"
 description = "Netbox Disaster Recovery Export"
 readme = "README.md"
