@@ -1,5 +1,5 @@
 {% macro meta(m) -%}
-_Last updated: {{ m.last_updated or "unknown" }}{% if m.changed_by %} by {{ m.changed_by }}{% endif %}_
+_Last updated: {{ m.formatted }}_
 {%- endmacro %}
 # {{ title }}
 
@@ -37,10 +37,10 @@ _No devices tagged `{{ tag }}`._
 ### {{ device_name }}
 
 {% if conns %}
-| Local | Remote | Cable | Status | Last updated |
-| --- | --- | --- | --- | --- |
+| Local | Remote | Status | Last updated |
+| --- | --- | --- | --- |
 {% for c in conns -%}
-| {{ c.local_termination }} | {{ c.remote_description }} | {{ c.cable_label or "-" }} | {{ c.cable_status or "-" }} | {{ c.metadata.last_updated or "-" }}{% if c.metadata.changed_by %} ({{ c.metadata.changed_by }}){% endif %} |
+| {{ c.local_termination }} | {{ c.remote_description }} | {{ c.cable_status or "-" }} | {{ c.metadata.formatted }} |
 {% endfor %}
 {% else %}
 _No cables found for this device._
@@ -53,10 +53,10 @@ _No cables found for this device._
 ### {{ device_name }}
 
 {% if ifaces %}
-| Interface | Type | Enabled | Description | MTU | Mode | Bridge | Untagged VLAN | Tagged VLANs | IP addresses | Last updated |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Interface | Type | Enabled | MTU | Mode | Bridge | Untagged VLAN | Tagged VLANs | IP addresses | Last updated |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 {% for i in ifaces -%}
-| {{ i.name }} | {{ i.type or "-" }} | {{ "yes" if i.enabled else "no" }} | {{ i.description or "-" }} | {{ i.mtu or "-" }} | {{ i.mode or "-" }} | {{ i.bridge or "-" }} | {{ i.untagged_vlan or "-" }} | {{ i.tagged_vlans | join(", ") or "-" }} | {{ i.ip_addresses | join(", ") or "-" }} | {{ i.metadata.last_updated or "-" }}{% if i.metadata.changed_by %} ({{ i.metadata.changed_by }}){% endif %} |
+| {{ i.name }} | {{ i.type or "-" }} | {{ "yes" if i.enabled else "no" }} | {{ i.mtu or "-" }} | {{ i.mode or "-" }} | {{ i.bridge or "-" }} | {{ i.untagged_vlan or "-" }} | {{ i.tagged_vlans | join(", ") or "-" }} | {{ i.ip_addresses | join(", ") or "-" }} | {{ i.metadata.formatted }} |
 {% endfor %}
 {% else %}
 _No interfaces found for this device._
@@ -82,7 +82,7 @@ _No interfaces found for this device._
 | Address | DNS name | Status | Role | Assigned to | Description | Last updated |
 | --- | --- | --- | --- | --- | --- | --- |
 {% for ip in s.ip_addresses -%}
-| {{ ip.address }} | {{ ip.dns_name or "-" }} | {{ ip.status or "-" }} | {{ ip.role or "-" }} | {{ ip.assigned_to or "-" }} | {{ ip.description or "-" }} | {{ ip.metadata.last_updated or "-" }}{% if ip.metadata.changed_by %} ({{ ip.metadata.changed_by }}){% endif %} |
+| {{ ip.address }} | {{ ip.dns_name or "-" }} | {{ ip.status or "-" }} | {{ ip.role or "-" }} | {{ ip.assigned_to or "-" }} | {{ ip.description or "-" }} | {{ ip.metadata.formatted }} |
 {% endfor %}
 {% else %}
 _No IP addresses recorded in this subnet._

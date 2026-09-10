@@ -53,10 +53,10 @@ def main(argv: list[str] | None = None) -> int:
     connections = collect_connections(client, raw_devices)
 
     print("Fetching interfaces and IP addresses...", file=sys.stderr)
-    interfaces, device_ips = collect_interfaces(client, raw_devices)
+    interfaces, device_ips, referenced_vlan_ids = collect_interfaces(client, raw_devices)
 
     print(f"Fetching VLANs and subnets tagged '{config.tag}'...", file=sys.stderr)
-    subnets = collect_subnets(client, config.tag, device_ips)
+    subnets = collect_subnets(client, config.tag, device_ips, referenced_vlan_ids)
 
     all_ip_infos = [ip for section in subnets for ip in section.ip_addresses]
     dns_zones = collect_dns(all_ip_infos)

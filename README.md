@@ -34,7 +34,7 @@ All tagged devices have their interfaces included in the document, including the
 
 ### VLAN and IP subnets
 
-All VLANs and subnets tagged are exported; it is enough to have either the VLAN or the subnet tagged to have both included in the export. 
+All VLANs and subnets tagged are exported; it is enough to have either the VLAN or the subnet tagged to have both included in the export. A VLAN or subnet used by an interface on a tagged device is also included, even if it carries no tag of its own.
 
 ### IP addresses
 

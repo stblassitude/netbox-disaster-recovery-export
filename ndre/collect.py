@@ -4,6 +4,8 @@ the Markdown template.
 
 from __future__ import annotations
 
+import ipaddress as ipmod
+
 from pynetbox import RequestError
 
 from ndre.client import NetboxClient
@@ -134,7 +136,6 @@ def collect_connections(client: NetboxClient, devices: list) -> dict:
                     local_device=device.name,
                     local_termination=local_desc,
                     remote_description=remote_desc,
-                    cable_label=cable.label or f"#{cable.id}",
                     cable_status=_label(cable.status),
                     metadata=_meta(client, cable, "dcim", "cable"),
                 )
@@ -148,9 +149,16 @@ def collect_connections(client: NetboxClient, devices: list) -> dict:
 
 
 def collect_interfaces(client: NetboxClient, devices: list):
-    """Return ({device_name: [InterfaceInfo, ...]}, [raw ip-address records])."""
+    """Return ({device_name: [InterfaceInfo, ...]}, [raw ip-address records],
+    {vlan ids referenced by interfaces on these devices}).
+
+    A VLAN doesn't have to be independently tagged to belong in the report:
+    if a tagged device has an interface using it (untagged or tagged), it's
+    in scope too.
+    """
     interfaces: dict[str, list[InterfaceInfo]] = {}
     all_ips = []
+    referenced_vlan_ids: set[int] = set()
 
     for device in devices:
         ips_by_iface: dict[int, list] = {}
@@ -162,18 +170,21 @@ def collect_interfaces(client: NetboxClient, devices: list):
 
         iface_list = []
         for iface in client.api.dcim.interfaces.filter(device_id=device.id):
-            tagged_vlans = [
-                f"{v.vid} ({v.name})" for v in (getattr(iface, "tagged_vlans", None) or [])
-            ]
+            raw_tagged_vlans = getattr(iface, "tagged_vlans", None) or []
+            tagged_vlans = [f"{v.vid} ({v.name})" for v in raw_tagged_vlans]
             untagged = getattr(iface, "untagged_vlan", None)
             iface_ips = ips_by_iface.get(iface.id, [])
+
+            referenced_vlan_ids.update(v.id for v in raw_tagged_vlans)
+            if untagged is not None:
+                referenced_vlan_ids.add(untagged.id)
+
             iface_list.append(
                 InterfaceInfo(
                     device=device.name,
                     name=iface.name,
                     type=_label(getattr(iface, "type", None)),
                     enabled=bool(iface.enabled),
-                    description=iface.description or None,
                     mtu=iface.mtu,
                     mode=_label(getattr(iface, "mode", None)),
                     bridge=_name(getattr(iface, "bridge", None)),
@@ -185,40 +196,60 @@ def collect_interfaces(client: NetboxClient, devices: list):
             )
         interfaces[device.name] = iface_list
 
-    return interfaces, all_ips
+    return interfaces, all_ips, referenced_vlan_ids
 
 
 # -- VLANs and subnets ----------------------------------------------------
 
 
-def collect_subnets(client: NetboxClient, tag: str, extra_ips: list) -> list:
-    """Pair up tagged VLANs/prefixes and attach relevant IP addresses."""
+def _vlan_info(client: NetboxClient, v) -> VlanInfo:
+    return VlanInfo(
+        vid=v.vid,
+        name=v.name,
+        site=_name(getattr(v, "site", None)),
+        group=_name(getattr(v, "group", None)),
+        status=_label(v.status),
+        metadata=_meta(client, v, "ipam", "vlan"),
+    )
+
+
+def _prefix_info(client: NetboxClient, p) -> PrefixInfo:
+    return PrefixInfo(
+        prefix=p.prefix,
+        vrf=_name(getattr(p, "vrf", None)),
+        site=_name(getattr(p, "site", None)),
+        status=_label(p.status),
+        description=p.description or None,
+        metadata=_meta(client, p, "ipam", "prefix"),
+    )
+
+
+def collect_subnets(
+    client: NetboxClient, tag: str, extra_ips: list, extra_vlan_ids: set | None = None
+) -> list:
+    """Pair up in-scope VLANs/prefixes and attach relevant IP addresses.
+
+    A VLAN or prefix is in scope either because it's tagged itself, or
+    because a tagged device has an interface using it -- an untagged/
+    tagged VLAN, or (handled while attaching IPs below) an address within
+    it -- even if the VLAN/prefix object carries no tag of its own.
+    """
     tagged_vlans = client.objects_by_tag(client.api.ipam.vlans, tag)
     tagged_prefixes = client.objects_by_tag(client.api.ipam.prefixes, tag)
+
+    vlans = list(tagged_vlans)
+    vlan_ids_seen = {v.id for v in vlans}
+    for vid in extra_vlan_ids or ():
+        if vid in vlan_ids_seen:
+            continue
+        v = client.api.ipam.vlans.get(vid)
+        if v is not None:
+            vlans.append(v)
+            vlan_ids_seen.add(vid)
 
     sections: list[SubnetSection] = []
     seen_prefix_ids: set[int] = set()
     seen_vlan_ids: set[int] = set()
-
-    def vlan_info(v) -> VlanInfo:
-        return VlanInfo(
-            vid=v.vid,
-            name=v.name,
-            site=_name(getattr(v, "site", None)),
-            group=_name(getattr(v, "group", None)),
-            status=_label(v.status),
-            metadata=_meta(client, v, "ipam", "vlan"),
-        )
-
-    def prefix_info(p) -> PrefixInfo:
-        return PrefixInfo(
-            prefix=p.prefix,
-            vrf=_name(getattr(p, "vrf", None)),
-            site=_name(getattr(p, "site", None)),
-            status=_label(p.status),
-            description=p.description or None,
-            metadata=_meta(client, p, "ipam", "prefix"),
-        )
 
     for p in tagged_prefixes:
         if p.id in seen_prefix_ids:
@@ -228,11 +259,11 @@ def collect_subnets(client: NetboxClient, tag: str, extra_ips: list) -> list:
         vi = None
         if vlan is not None:
             full_vlan = client.api.ipam.vlans.get(vlan.id)
-            vi = vlan_info(full_vlan)
+            vi = _vlan_info(client, full_vlan)
             seen_vlan_ids.add(full_vlan.id)
-        sections.append(SubnetSection(prefix=prefix_info(p), vlan=vi))
+        sections.append(SubnetSection(prefix=_prefix_info(client, p), vlan=vi))
 
-    for v in tagged_vlans:
+    for v in vlans:
         if v.id in seen_vlan_ids:
             continue
         seen_vlan_ids.add(v.id)
@@ -242,18 +273,22 @@ def collect_subnets(client: NetboxClient, tag: str, extra_ips: list) -> list:
             if p.id in seen_prefix_ids:
                 continue
             seen_prefix_ids.add(p.id)
-            sections.append(SubnetSection(prefix=prefix_info(p), vlan=vlan_info(v)))
+            sections.append(SubnetSection(prefix=_prefix_info(client, p), vlan=_vlan_info(client, v)))
             matched = True
         if not matched:
-            sections.append(SubnetSection(prefix=None, vlan=vlan_info(v)))
+            sections.append(SubnetSection(prefix=None, vlan=_vlan_info(client, v)))
 
-    _attach_ip_addresses(client, sections, extra_ips)
+    _attach_ip_addresses(client, sections, extra_ips, seen_prefix_ids, seen_vlan_ids)
     return sections
 
 
-def _attach_ip_addresses(client: NetboxClient, sections: list, extra_ips: list):
-    import ipaddress as ipmod
-
+def _attach_ip_addresses(
+    client: NetboxClient,
+    sections: list,
+    extra_ips: list,
+    seen_prefix_ids: set,
+    seen_vlan_ids: set,
+):
     networks = []
     for section in sections:
         if section.prefix is None:
@@ -273,10 +308,49 @@ def _attach_ip_addresses(client: NetboxClient, sections: list, extra_ips: list):
             addr = ipmod.ip_interface(ip.address).ip
         except ValueError:
             continue
-        for net, section in networks:
-            if addr in net:
-                section.ip_addresses.append(_ip_info(client, ip))
-                break
+
+        section = next((s for net, s in networks if addr in net), None)
+        if section is None:
+            section = _section_for_orphan_ip(
+                client, ip.address, sections, networks, seen_prefix_ids, seen_vlan_ids
+            )
+        if section is not None:
+            section.ip_addresses.append(_ip_info(client, ip))
+
+
+def _section_for_orphan_ip(
+    client: NetboxClient,
+    ip_address: str,
+    sections: list,
+    networks: list,
+    seen_prefix_ids: set,
+    seen_vlan_ids: set,
+) -> SubnetSection | None:
+    """An IP on a tagged device's interface is in scope even when its
+    containing prefix isn't independently tagged -- look the prefix up in
+    Netbox and add a section for it.
+    """
+    candidates = [
+        p for p in client.api.ipam.prefixes.filter(contains=ip_address) if p.id not in seen_prefix_ids
+    ]
+    if not candidates:
+        return None
+
+    prefix = max(candidates, key=lambda p: ipmod.ip_network(p.prefix, strict=False).prefixlen)
+    seen_prefix_ids.add(prefix.id)
+
+    vlan = getattr(prefix, "vlan", None)
+    vi = None
+    if vlan is not None and vlan.id not in seen_vlan_ids:
+        full_vlan = client.api.ipam.vlans.get(vlan.id)
+        if full_vlan is not None:
+            vi = _vlan_info(client, full_vlan)
+            seen_vlan_ids.add(full_vlan.id)
+
+    section = SubnetSection(prefix=_prefix_info(client, prefix), vlan=vi)
+    sections.append(section)
+    networks.append((ipmod.ip_network(prefix.prefix, strict=False), section))
+    return section
 
 
 def _ip_info(client: NetboxClient, ip) -> IPAddressInfo:

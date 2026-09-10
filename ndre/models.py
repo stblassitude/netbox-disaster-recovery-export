@@ -10,6 +10,16 @@ class Metadata:
     last_updated: str | None = None
     changed_by: str | None = None
 
+    @property
+    def formatted(self) -> str:
+        """Renders as "yyyy-mm-dd hh:mm username", degrading gracefully
+        if either part is missing."""
+        if not self.last_updated:
+            return "unknown"
+        if self.changed_by:
+            return f"{self.last_updated} {self.changed_by}"
+        return self.last_updated
+
 
 @dataclass
 class DeviceInfo:
@@ -33,7 +43,6 @@ class Connection:
     local_device: str
     local_termination: str
     remote_description: str
-    cable_label: str | None
     cable_status: str | None
     metadata: Metadata
 
@@ -44,7 +53,6 @@ class InterfaceInfo:
     name: str
     type: str | None
     enabled: bool
-    description: str | None
     mtu: int | None
     mode: str | None
     bridge: str | None

@@ -8,6 +8,8 @@ column wrapping, font size, and page orientation.
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 PDF_CSS = """
@@ -91,7 +93,24 @@ class PdfRenderError(RuntimeError):
     pass
 
 
+def _add_homebrew_lib_path() -> None:
+    """Homebrew's lib directory isn't on macOS's default dynamic linker
+    search path, so WeasyPrint's cffi-based loader fails to find
+    Homebrew-installed Pango/Cairo/GDK-Pixbuf even when they're on disk
+    (`brew install pango`). Point DYLD_LIBRARY_PATH at it before WeasyPrint
+    runs its dlopen() calls at import time.
+    """
+    if sys.platform != "darwin":
+        return
+    for prefix in ("/opt/homebrew", "/usr/local"):
+        lib_dir = f"{prefix}/lib"
+        existing = os.environ.get("DYLD_LIBRARY_PATH", "")
+        if os.path.isdir(lib_dir) and lib_dir not in existing.split(":"):
+            os.environ["DYLD_LIBRARY_PATH"] = f"{lib_dir}:{existing}" if existing else lib_dir
+
+
 def render_pdf(markdown_path: str, pdf_path: str) -> None:
+    _add_homebrew_lib_path()
     try:
         import markdown as markdown_lib
         from weasyprint import HTML
@@ -100,6 +119,13 @@ def render_pdf(markdown_path: str, pdf_path: str) -> None:
             "PDF rendering requires the 'pdf' extra. Install it with:\n"
             '  pip install -e ".[pdf]"\n'
             f"(missing dependency: {exc.name})"
+        ) from exc
+    except OSError as exc:
+        raise PdfDependencyError(
+            "WeasyPrint could not load its native dependencies (Pango, "
+            "Cairo, GDK-Pixbuf). On macOS: brew install pango. See "
+            "https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation\n"
+            f"(underlying error: {exc})"
         ) from exc
 
     markdown_text = Path(markdown_path).read_text(encoding="utf-8")

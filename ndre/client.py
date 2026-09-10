@@ -3,11 +3,27 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 
 import pynetbox
 import urllib3
 from pynetbox import RequestError
 from pynetbox.core.app import App
+
+
+def _format_last_updated(value) -> str | None:
+    """Format Netbox's ISO 8601 last_updated timestamp as "yyyy-mm-dd hh:mm".
+
+    Falls back to the raw value if it doesn't parse as expected -- still
+    better than crashing the whole export over a display nicety.
+    """
+    if not value:
+        return None
+    text = str(value)
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return text
 
 
 class NetboxClient:
@@ -161,8 +177,7 @@ class NetboxClient:
         unreliable because plural-to-singular model names aren't regular
         (e.g. "prefixes" -> "prefix", not "prefixe").
         """
-        last_updated = getattr(obj, "last_updated", None)
-        last_updated = str(last_updated) if last_updated else None
+        last_updated = _format_last_updated(getattr(obj, "last_updated", None))
 
         changed_by = None
         ct_id = self._content_type_id(app_label, model)
