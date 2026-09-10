@@ -101,14 +101,23 @@ def _add_homebrew_lib_path() -> None:
     Homebrew-installed Pango/Cairo/GDK-Pixbuf even when they're on disk
     (`brew install pango`). Point DYLD_LIBRARY_PATH at it before WeasyPrint
     runs its dlopen() calls at import time.
+
+    Sets at most one directory rather than merging in existing/further
+    candidates: dyld reliably honors a single-entry DYLD_LIBRARY_PATH set
+    from within the running process, but a multi-entry value set the same
+    way (after process start, as opposed to being present at exec time)
+    was observed to be silently ignored -- so a machine carrying both a
+    stale Intel Homebrew at /usr/local and the real one at /opt/homebrew
+    would end up with neither honored. Leaves an existing value alone,
+    on the assumption the user or shell set it deliberately.
     """
-    if sys.platform != "darwin":
+    if sys.platform != "darwin" or "DYLD_LIBRARY_PATH" in os.environ:
         return
     for prefix in ("/opt/homebrew", "/usr/local"):
         lib_dir = f"{prefix}/lib"
-        existing = os.environ.get("DYLD_LIBRARY_PATH", "")
-        if os.path.isdir(lib_dir) and lib_dir not in existing.split(":"):
-            os.environ["DYLD_LIBRARY_PATH"] = f"{lib_dir}:{existing}" if existing else lib_dir
+        if os.path.isdir(lib_dir):
+            os.environ["DYLD_LIBRARY_PATH"] = lib_dir
+            return
 
 
 def render_pdf(markdown_path: str, pdf_path: str) -> None:

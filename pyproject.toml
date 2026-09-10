@@ -1,6 +1,6 @@
 [project]
 name = "netbox_disaster_recovery_export"
-version = "1.2.3"
+version = "1.2.4"
 description = "Netbox Disaster Recovery Export"
 readme = "README.md"
 requires-python = ">=3.9"
