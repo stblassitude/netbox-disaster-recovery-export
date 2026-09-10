@@ -3,6 +3,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import requests
+from pynetbox import RequestError
+
 from ndre.client import NetboxClient
 from ndre.collect import (
     collect_connections,
@@ -22,6 +25,26 @@ def main(argv: list[str] | None = None) -> int:
     config = parse_args(argv)
 
     client = NetboxClient(config.netbox_url, config.netbox_token, config.tls_verify)
+
+    try:
+        tag_found = client.tag_exists(config.tag)
+    except RequestError as exc:
+        status = getattr(exc.req, "status_code", None)
+        if status in (401, 403):
+            print(
+                f"error: Netbox rejected the API token ({status} {exc.req.reason}): {exc.error}",
+                file=sys.stderr,
+            )
+        else:
+            print(f"error: Netbox request failed: {exc}", file=sys.stderr)
+        return 1
+    except requests.exceptions.ConnectionError as exc:
+        print(f"error: could not connect to Netbox at {config.netbox_url}: {exc}", file=sys.stderr)
+        return 1
+
+    if not tag_found:
+        print(f"error: no tag '{config.tag}' found in Netbox", file=sys.stderr)
+        return 1
 
     print(f"Fetching devices tagged '{config.tag}'...", file=sys.stderr)
     devices, raw_devices = collect_devices(client, config.tag)

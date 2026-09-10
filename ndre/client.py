@@ -26,6 +26,15 @@ class NetboxClient:
         """Return a list of records from a pynetbox endpoint filtered by tag."""
         return list(endpoint.filter(tag=tag))
 
+    def tag_exists(self, tag: str) -> bool:
+        """Check whether a tag with this slug exists in Netbox.
+
+        Every tag-filtered query below fails with an opaque 400 if the tag
+        slug doesn't exist, so callers should check this upfront and fail
+        with a clear error message instead.
+        """
+        return self.api.extras.tags.get(slug=tag) is not None
+
     def discover_taggable_endpoints(self):
         """Discover every list endpoint that supports filtering by tag.
 
