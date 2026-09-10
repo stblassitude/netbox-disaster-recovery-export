@@ -1,0 +1,10 @@
+.claude/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+ndre.egg-info/
+build/
+dist/
+ndre-export.md
+ndre-export.pdf

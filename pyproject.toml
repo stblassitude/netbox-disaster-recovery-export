@@ -1,0 +1,32 @@
+[project]
+name = "ndre"
+version = "0.1.0"
+description = "Netbox Disaster Recovery Export"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pynetbox>=7.3,<8",
+    "Jinja2>=3.1,<4",
+]
+
+[project.optional-dependencies]
+pdf = [
+    "Markdown>=3.5,<4",
+    "weasyprint>=61,<71",
+]
+dev = [
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+ndre = "ndre.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["ndre*"]
+
+[tool.setuptools.package-data]
+ndre = ["templates/*.j2"]

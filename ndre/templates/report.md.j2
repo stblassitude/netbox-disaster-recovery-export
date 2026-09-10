@@ -1,0 +1,107 @@
+{% macro meta(m) -%}
+_Last updated: {{ m.last_updated or "unknown" }}{% if m.changed_by %} by {{ m.changed_by }}{% endif %}_
+{%- endmacro %}
+# {{ title }}
+
+Generated {{ generated_at }} from tag `{{ tag }}`.
+
+{% for section in frontmatter %}
+{{ section }}
+
+{% endfor %}
+## Devices
+{% for d in devices %}
+### {{ d.name }}
+
+{{ meta(d.metadata) }}
+
+| Field | Value |
+| --- | --- |
+| Site | {{ d.site or "-" }} |
+| Location | {{ d.location or "-" }} |
+| Rack | {{ d.rack or "-" }} |
+| Position | {{ d.position or "-" }} |
+| Face | {{ d.face or "-" }} |
+| Role | {{ d.role or "-" }} |
+| Type | {{ d.manufacturer or "-" }} {{ d.device_type or "" }} |
+| Serial | {{ d.serial or "-" }} |
+| Asset tag | {{ d.asset_tag or "-" }} |
+| Status | {{ d.status or "-" }} |
+
+{% else %}
+_No devices tagged `{{ tag }}`._
+{% endfor %}
+
+## Device Connectivity
+{% for device_name, conns in connections.items() %}
+### {{ device_name }}
+
+{% if conns %}
+| Local | Remote | Cable | Status | Last updated |
+| --- | --- | --- | --- | --- |
+{% for c in conns -%}
+| {{ c.local_termination }} | {{ c.remote_description }} | {{ c.cable_label or "-" }} | {{ c.cable_status or "-" }} | {{ c.metadata.last_updated or "-" }}{% if c.metadata.changed_by %} ({{ c.metadata.changed_by }}){% endif %} |
+{% endfor %}
+{% else %}
+_No cables found for this device._
+{% endif %}
+
+{% endfor %}
+
+## Device Interfaces
+{% for device_name, ifaces in interfaces.items() %}
+### {{ device_name }}
+
+{% if ifaces %}
+| Interface | Type | Enabled | Description | MTU | Mode | Bridge | Untagged VLAN | Tagged VLANs | IP addresses | Last updated |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+{% for i in ifaces -%}
+| {{ i.name }} | {{ i.type or "-" }} | {{ "yes" if i.enabled else "no" }} | {{ i.description or "-" }} | {{ i.mtu or "-" }} | {{ i.mode or "-" }} | {{ i.bridge or "-" }} | {{ i.untagged_vlan or "-" }} | {{ i.tagged_vlans | join(", ") or "-" }} | {{ i.ip_addresses | join(", ") or "-" }} | {{ i.metadata.last_updated or "-" }}{% if i.metadata.changed_by %} ({{ i.metadata.changed_by }}){% endif %} |
+{% endfor %}
+{% else %}
+_No interfaces found for this device._
+{% endif %}
+
+{% endfor %}
+
+## VLANs and IP Subnets
+{% for s in subnets %}
+### {{ s.prefix.prefix if s.prefix else "VLAN " ~ s.vlan.vid }}
+
+{% if s.vlan %}
+- **VLAN:** {{ s.vlan.vid }} ({{ s.vlan.name }}){% if s.vlan.site %}, site {{ s.vlan.site }}{% endif %}{% if s.vlan.group %}, group {{ s.vlan.group }}{% endif %} — status {{ s.vlan.status or "-" }}
+  {{ meta(s.vlan.metadata) }}
+{% endif %}
+{% if s.prefix %}
+- **Prefix:** {{ s.prefix.prefix }}{% if s.prefix.vrf %}, VRF {{ s.prefix.vrf }}{% endif %}{% if s.prefix.site %}, site {{ s.prefix.site }}{% endif %} — status {{ s.prefix.status or "-" }}
+  {% if s.prefix.description %}{{ s.prefix.description }}{% endif %}
+  {{ meta(s.prefix.metadata) }}
+{% endif %}
+
+{% if s.ip_addresses %}
+| Address | DNS name | Status | Role | Assigned to | Description | Last updated |
+| --- | --- | --- | --- | --- | --- | --- |
+{% for ip in s.ip_addresses -%}
+| {{ ip.address }} | {{ ip.dns_name or "-" }} | {{ ip.status or "-" }} | {{ ip.role or "-" }} | {{ ip.assigned_to or "-" }} | {{ ip.description or "-" }} | {{ ip.metadata.last_updated or "-" }}{% if ip.metadata.changed_by %} ({{ ip.metadata.changed_by }}){% endif %} |
+{% endfor %}
+{% else %}
+_No IP addresses recorded in this subnet._
+{% endif %}
+
+{% else %}
+_No VLANs or subnets tagged `{{ tag }}`._
+{% endfor %}
+
+## DNS Entries
+{% for zone in dns_zones %}
+### {{ zone.zone }}
+
+| Name | Address | Assigned to |
+| --- | --- | --- |
+{% for r in zone.records -%}
+| {{ r.dns_name }} | {{ r.address }} | {{ r.assigned_to or "-" }} |
+{% endfor %}
+
+{% else %}
+_No DNS names found among exported IP addresses._
+{% endfor %}
