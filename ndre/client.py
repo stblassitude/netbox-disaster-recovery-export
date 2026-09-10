@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 
 import pynetbox
+import urllib3
 from pynetbox import RequestError
 from pynetbox.core.app import App
 
@@ -14,6 +15,9 @@ class NetboxClient:
         self.api = pynetbox.api(url, token=token)
         if not tls_verify:
             self.api.http_session.verify = False
+            # --insecure means the user already knows and accepts this; the
+            # warning would otherwise fire on every single request.
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self._content_type_ids: dict[tuple[str, str], int] = {}
         # Where the content-type and changelog endpoints live has moved more
         # than once across Netbox versions, and not always in lockstep: e.g.
