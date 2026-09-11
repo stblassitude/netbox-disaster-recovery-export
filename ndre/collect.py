@@ -422,6 +422,14 @@ _HANDLED_ENDPOINTS = {
     ("ipam", "vlans"),
     ("ipam", "prefixes"),
     ("ipam", "ip-addresses"),
+    # Generic "this object is tagged" join records (Netbox's taggit-backed
+    # tag/object relation, exposed under different names across versions).
+    # Every object below only has a tag *because* we found it via this
+    # tag, so a table just confirming that is redundant by definition --
+    # and it duplicates the curated sections above for any object type
+    # (device, VLAN, ...) that already has one.
+    ("extras", "tagged-objects"),
+    ("extras", "tagged-items"),
 }
 
 _SKIPPED_PROPERTIES = {"id", "url", "display", "display_url", "name", "label"}
