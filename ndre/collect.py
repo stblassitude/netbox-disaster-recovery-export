@@ -5,6 +5,7 @@ the Markdown template.
 from __future__ import annotations
 
 import ipaddress as ipmod
+import re
 
 from pynetbox import RequestError
 
@@ -24,6 +25,18 @@ from ndre.models import (
 )
 
 
+_DIGITS_RE = re.compile(r"(\d+)")
+
+
+def _natural_key(text: str | None):
+    """Sort key comparing digit runs numerically and everything else
+    case-insensitively as text, so "eth2" < "eth10" < "eth11" instead of
+    the lexicographic "eth10" < "eth11" < "eth2".
+    """
+    text = text or ""
+    return [int(part) if part.isdigit() else part.lower() for part in _DIGITS_RE.split(text)]
+
+
 def _name(obj) -> str | None:
     return getattr(obj, "name", None) if obj else None
 
@@ -41,8 +54,8 @@ def _meta(client: NetboxClient, obj, app_label: str, model: str) -> Metadata:
 
 
 def collect_devices(client: NetboxClient, tag: str) -> list:
-    """Return (DeviceInfo list, raw pynetbox device records)."""
-    raw = client.objects_by_tag(client.api.dcim.devices, tag)
+    """Return (DeviceInfo list, raw pynetbox device records), sorted by name."""
+    raw = sorted(client.objects_by_tag(client.api.dcim.devices, tag), key=lambda d: _natural_key(d.name))
     devices = []
     for d in raw:
         role = getattr(d, "role", None) or getattr(d, "device_role", None)
@@ -142,6 +155,8 @@ def collect_connections(client: NetboxClient, devices: list) -> dict:
             )
             seen_cable_ids.add(cable.id)
 
+        result[device.name].sort(key=lambda c: _natural_key(c.local_termination))
+
     return result
 
 
@@ -171,7 +186,9 @@ def collect_interfaces(client: NetboxClient, devices: list):
         iface_list = []
         for iface in client.api.dcim.interfaces.filter(device_id=device.id):
             raw_tagged_vlans = getattr(iface, "tagged_vlans", None) or []
-            tagged_vlans = [f"{v.vid} ({v.name})" for v in raw_tagged_vlans]
+            tagged_vlans = sorted(
+                (f"{v.vid} ({v.name})" for v in raw_tagged_vlans), key=_natural_key
+            )
             untagged = getattr(iface, "untagged_vlan", None)
             iface_ips = ips_by_iface.get(iface.id, [])
 
@@ -190,10 +207,11 @@ def collect_interfaces(client: NetboxClient, devices: list):
                     bridge=_name(getattr(iface, "bridge", None)),
                     untagged_vlan=f"{untagged.vid} ({untagged.name})" if untagged else None,
                     tagged_vlans=tagged_vlans,
-                    ip_addresses=[ip.address for ip in iface_ips],
+                    ip_addresses=sorted((ip.address for ip in iface_ips), key=_natural_key),
                     metadata=_meta(client, iface, "dcim", "interface"),
                 )
             )
+        iface_list.sort(key=lambda i: _natural_key(i.name))
         interfaces[device.name] = iface_list
 
     return interfaces, all_ips, referenced_vlan_ids
@@ -279,6 +297,10 @@ def collect_subnets(
             sections.append(SubnetSection(prefix=None, vlan=_vlan_info(client, v)))
 
     _attach_ip_addresses(client, sections, extra_ips, seen_prefix_ids, seen_vlan_ids)
+
+    for section in sections:
+        section.ip_addresses.sort(key=lambda ip: _natural_key(ip.address))
+    sections.sort(key=lambda s: _natural_key(s.prefix.prefix if s.prefix else f"VLAN {s.vlan.vid}"))
     return sections
 
 
@@ -384,7 +406,9 @@ def collect_dns(all_ip_infos: list) -> list:
         zone = ".".join(labels[1:]) if len(labels) > 1 else "(no zone)"
         zones.setdefault(zone, DnsZoneSection(zone=zone)).records.append(ip)
 
-    return [zones[z] for z in sorted(zones)]
+    for section in zones.values():
+        section.records.sort(key=lambda ip: _natural_key(ip.dns_name))
+    return sorted(zones.values(), key=lambda s: _natural_key(s.zone))
 
 
 # -- Any other tagged object, discovered generically -----------------------
@@ -462,6 +486,7 @@ def collect_other_tagged_objects(client: NetboxClient, tag: str) -> list[TaggedO
                 if key not in columns:
                     columns.append(key)
             objects.append(TaggedObject(name=str(obj), properties=props))
+        objects.sort(key=lambda o: _natural_key(o.name))
 
         sections.append(
             TaggedObjectSection(
@@ -471,5 +496,5 @@ def collect_other_tagged_objects(client: NetboxClient, tag: str) -> list[TaggedO
             )
         )
 
-    sections.sort(key=lambda s: s.label)
+    sections.sort(key=lambda s: _natural_key(s.label))
     return sections
